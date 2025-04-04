@@ -34,7 +34,12 @@ styled_edges = top_edges_display.style.background_gradient(
     cmap="YlGn", subset=["Bet_Edge", "Confidence"]
 )
 
-st.dataframe(styled_edges, use_container_width=True, hide_index=True, )
+num_rows = len(top_edges_display)
+row_height = 35
+header_height = 40
+height = min(800, header_height + row_height * num_rows)
+
+st.dataframe(styled_edges, use_container_width=True, height=height)
 
 # === Underdog Plays ===
 st.markdown("### 🐶 Underdog Value Picks")
