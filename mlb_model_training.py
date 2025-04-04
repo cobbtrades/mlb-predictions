@@ -1,5 +1,5 @@
 # mlb_model_training.py
-import pandas as pd, numpy as np, pickle
+import pandas as pd, numpy as np, pickle, os, joblib
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
@@ -98,7 +98,7 @@ df['betting_edge'] = df['model_win_prob'] - df['Tm_prob']
 df.to_csv('game_logs_with_predictions.csv', index=False)
 print("📈 Betting edge and predictions saved to game_logs_with_predictions.csv")
 
-# === Save Trained Model ===
-with open('rf_mlb_model.pkl', 'wb') as f:
-    pickle.dump(grid_search.best_estimator_, f)
-print("✅ Model saved to rf_mlb_model.pkl")
+# Save compressed model using joblib
+model_path = os.path.join('data', 'rf_mlb_model.joblib')
+joblib.dump(grid_search.best_estimator_, model_path, compress=3)
+print(f"✅ Compressed model saved to {model_path}")

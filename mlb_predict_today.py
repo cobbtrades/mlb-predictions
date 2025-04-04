@@ -1,6 +1,6 @@
 # mlb_predict_today.py
 
-import requests, re, json, pandas as pd, numpy as np, pickle, os
+import requests, re, json, pandas as pd, numpy as np, os, joblib
 from datetime import datetime
 from itertools import combinations
 
@@ -68,8 +68,7 @@ def compute_parlay_ev(combo):
 # === Main Prediction Logic ===
 def run_predictions():
     # Load model and logs
-    with open(os.path.join(data_dir, 'rf_mlb_model.pkl'), 'rb') as f:
-        model = pickle.load(f)
+    model = joblib.load(os.path.join(data_dir, 'rf_mlb_model.joblib'))
     logs = pd.read_csv(os.path.join(data_dir, 'game_logs.csv'))
     logs['Date'] = pd.to_datetime(logs['Date'])
 
