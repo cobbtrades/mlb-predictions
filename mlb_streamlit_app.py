@@ -28,6 +28,7 @@ def render_html_table(df, title=None, formats=None, subset=None, gradient_column
             border-collapse: collapse;
             font-family: 'Segoe UI', sans-serif;
             margin-bottom: 1rem;
+            text-align: center;
         }
         thead {
             background-color: #f1f1f1;
