@@ -20,64 +20,67 @@ col3.metric("💰 Top Parlay EV", f"{parlays_df['EV'].max():.2f}" if not parlays
 st.divider()
 
 # === Styling Helper ===
-def render_html_table(df, title=None, formats=None, subset=None, gradient_column=None):
-    styles = """
+def render_html_table(df, formats=None, highlight_column=None):
+    theme = st.get_option("theme.base") or "light"
+    text_color = "white" if theme == "dark" else "black"
+    bg_color = "#000" if theme == "dark" else "#fff"
+
+    styles = f"""
     <style>
-        table {
+        table {{
             width: 100%;
             border-collapse: collapse;
             font-family: 'Segoe UI', sans-serif;
             margin-bottom: 1rem;
             text-align: center;
-        }
-        thead {
+            background-color: {bg_color};
+            color: {text_color};
+        }}
+        thead {{
             background-color: #f1f1f1;
-        }
-        th {
+            color: black;
+        }}
+        th {{
             padding: 12px;
-            text-align: center;
             font-weight: 600;
-            color: #222;
             border-bottom: 2px solid #ddd;
-        }
-        td {
+        }}
+        td {{
             padding: 10px;
-            text-align: center;
             border-bottom: 1px solid #eee;
-        }
-        tr:hover { background-color: #f9f9f9; }
+        }}
+        tr:hover {{ background-color: #f9f9f9; }}
     </style>
     """
 
-    # Optional gradient coloring BEFORE formatting
-    color_map = {}
-    if gradient_column and gradient_column in df.columns and pd.api.types.is_numeric_dtype(df[gradient_column]):
-        max_val = df[gradient_column].max()
-        min_val = df[gradient_column].min()
-        range_val = max_val - min_val if max_val != min_val else 1
-
-        for idx, val in df[gradient_column].items():
-            norm = (val - min_val) / range_val
-            intensity = int(240 - 150 * norm)
-            color_map[idx] = f"background-color: rgb(240, {intensity}, 240);"
-
-    # Format values AFTER gradient calc
     if formats:
         for col, fmt in formats.items():
             if col in df.columns:
                 df[col] = df[col].map(fmt)
 
-    # Generate HTML manually with optional row highlights
     html = styles + "<table><thead><tr>"
     for col in df.columns:
         html += f"<th>{col}</th>"
     html += "</tr></thead><tbody>"
 
-    for i, row in df.iterrows():
+    for _, row in df.iterrows():
         html += "<tr>"
         for col in df.columns:
-            style = color_map.get(i, "") if col == gradient_column else ""
-            html += f"<td style='{style}'>{row[col]}</td>"
+            val = row[col]
+            color = ""
+            if col == highlight_column:
+                if isinstance(val, str) and '%' in val:
+                    val_num = float(val.strip('%'))
+                    if val_num < 0:
+                        color = "red"
+                    elif val_num > 0:
+                        color = "limegreen"
+                elif isinstance(val, (int, float)):
+                    if val < 0:
+                        color = "red"
+                    elif val > 0:
+                        color = "limegreen"
+            html += f"<td style='color:{color}'>{val}</td>"
         html += "</tr>"
     html += "</tbody></table>"
     return html
@@ -88,15 +91,17 @@ if top_edges_df.empty:
     st.info("No predictions available today.")
 else:
     edges_df = top_edges_df[[
-        'Tm', 'Opp', 'Home', 'Tm_ml', 'Opp_ml', 'Tm_prob',
+        'Tm', 'Opp', 'Tm_ml', 'Opp_ml', 'Tm_prob',
         'Pred_prob', 'Bet_Edge', 'Prediction', 'Confidence'
     ]].copy().sort_values("Bet_Edge", ascending=False)
 
+    edges_df["Winner"] = edges_df.apply(lambda x: x["Tm"] if x["Prediction"] == 1 else x["Opp"], axis=1)
+    edges_df.drop(columns=["Prediction"], inplace=True)
     edges_df.rename(columns={
-        'Tm': 'Team', 'Opp': 'Opponent', 'Home': 'Home?',
+        'Tm': 'Team', 'Opp': 'Opponent',
         'Tm_ml': 'Team ML', 'Opp_ml': 'Opp ML',
         'Tm_prob': 'Implied Prob', 'Pred_prob': 'Model Prob',
-        'Bet_Edge': 'Edge', 'Confidence': 'Confidence', 'Prediction': 'Pick'
+        'Bet_Edge': 'Edge', 'Confidence': 'Conf.'
     }, inplace=True)
 
     st.markdown(render_html_table(
@@ -107,9 +112,9 @@ else:
             'Implied Prob': '{:.1%}'.format,
             'Model Prob': '{:.1%}'.format,
             'Edge': '{:+.1%}'.format,
-            'Confidence': '{:.0%}'.format
+            'Conf.': '{:.0%}'.format
         },
-        gradient_column='Edge'
+        highlight_column="Edge"
     ), unsafe_allow_html=True)
 
 # === Underdogs Table ===
@@ -122,10 +127,12 @@ else:
         'Bet_Edge', 'Prediction', 'Confidence'
     ]].copy().sort_values("Bet_Edge", ascending=False)
 
+    dog_df["Winner"] = dog_df.apply(lambda x: x["Tm"] if x["Prediction"] == 1 else x["Opp"], axis=1)
+    dog_df.drop(columns=["Prediction"], inplace=True)
     dog_df.rename(columns={
         'Tm': 'Team', 'Opp': 'Opponent', 'Tm_ml': 'ML',
         'Tm_prob': 'Implied Prob', 'Pred_prob': 'Model Prob',
-        'Bet_Edge': 'Edge', 'Prediction': 'Pick', 'Confidence': 'Conf.'
+        'Bet_Edge': 'Edge', 'Confidence': 'Conf.'
     }, inplace=True)
 
     st.markdown(render_html_table(
@@ -137,7 +144,7 @@ else:
             'Edge': '{:+.1%}'.format,
             'Conf.': '{:.0%}'.format
         },
-        gradient_column='Edge'
+        highlight_column='Edge'
     ), unsafe_allow_html=True)
 
 # === Parlays Table ===
@@ -153,7 +160,7 @@ else:
             'Win Prob': '{:.1%}'.format,
             'EV': '{:+.1%}'.format
         },
-        gradient_column='EV'
+        highlight_column='EV'
     ), unsafe_allow_html=True)
 
 # === Footer ===
