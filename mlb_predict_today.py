@@ -1,8 +1,13 @@
 # mlb_predict_today.py
 
-import requests, re, json, pandas as pd, numpy as np, os, joblib
+import requests, re, json, pandas as pd, numpy as np, os, joblib, subprocess
 from datetime import datetime
 from itertools import combinations
+
+# === Run Data Pipeline ===
+print("🔄 Running data pipeline to ensure fresh stats and odds...")
+subprocess.run(["python", "mlb_data_pipeline.py"], check=True)
+print("✅ Data pipeline completed.")
 
 # === CONFIG ===
 tmap = {'KC': 'KCR', 'SD': 'SDP', 'SF': 'SFG', 'TB': 'TBR', 'WAS': 'WSN'}
