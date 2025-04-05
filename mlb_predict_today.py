@@ -120,7 +120,7 @@ def run_predictions():
     for combo in combinations(sorted_latest.to_dict('records'), 3):
         decimal_odds, prob_win, ev = compute_parlay_ev(combo)
         parlay_combos.append({
-            'Teams': " + ".join(f"{g['Tm']} vs {g['Opp']}" for g in combo),
+            'Teams': " + ".join(g['Tm'] if g['Pred_prob'] > 0.5 else g['Opp'] for g in combo),
             'Decimal Odds': round(decimal_odds, 2),
             'Win Prob': round(prob_win, 4),
             'EV': round(ev, 4)

@@ -1,3 +1,4 @@
+# mlb_streamlit_app.py
 import streamlit as st
 import pandas as pd
 from mlb_predict_today import run_predictions
@@ -95,14 +96,20 @@ else:
         'Pred_prob', 'Bet_Edge', 'Prediction', 'Confidence'
     ]].copy().sort_values("Bet_Edge", ascending=False)
 
-    edges_df["Winner"] = edges_df.apply(lambda x: x["Tm"] if x["Prediction"] == 1 else x["Opp"], axis=1)
-    edges_df.drop(columns=["Prediction"], inplace=True)
     edges_df.rename(columns={
         'Tm': 'Team', 'Opp': 'Opponent',
         'Tm_ml': 'Team ML', 'Opp_ml': 'Opp ML',
         'Tm_prob': 'Implied Prob', 'Pred_prob': 'Model Prob',
         'Bet_Edge': 'Edge', 'Confidence': 'Conf.'
     }, inplace=True)
+
+    # Compute Winner from predicted probability
+    edges_df["Winner"] = edges_df.apply(
+        lambda x: x["Team"] if x["Model Prob"] > 0.5 else x["Opponent"],
+        axis=1
+    )
+
+    edges_df.drop(columns=["Prediction"], inplace=True)
 
     st.markdown(render_html_table(
         edges_df,
@@ -127,13 +134,19 @@ else:
         'Bet_Edge', 'Prediction', 'Confidence'
     ]].copy().sort_values("Bet_Edge", ascending=False)
 
-    dog_df["Winner"] = dog_df.apply(lambda x: x["Tm"] if x["Prediction"] == 1 else x["Opp"], axis=1)
-    dog_df.drop(columns=["Prediction"], inplace=True)
     dog_df.rename(columns={
         'Tm': 'Team', 'Opp': 'Opponent', 'Tm_ml': 'ML',
         'Tm_prob': 'Implied Prob', 'Pred_prob': 'Model Prob',
         'Bet_Edge': 'Edge', 'Confidence': 'Conf.'
     }, inplace=True)
+
+    # Compute Winner from predicted probability
+    dog_df["Winner"] = dog_df.apply(
+        lambda x: x["Team"] if x["Model Prob"] > 0.5 else x["Opponent"],
+        axis=1
+    )
+
+    dog_df.drop(columns=["Prediction"], inplace=True)
 
     st.markdown(render_html_table(
         dog_df,
