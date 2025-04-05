@@ -1,13 +1,9 @@
 # mlb_predict_today.py
-
-import requests, re, json, pandas as pd, numpy as np, os, joblib, subprocess
+import subprocess
+import threading
+import requests, re, json, pandas as pd, numpy as np, os, joblib
 from datetime import datetime
 from itertools import combinations
-
-# === Run Data Pipeline ===
-print("🔄 Running data pipeline to ensure fresh stats and odds...")
-subprocess.run(["python", "mlb_data_pipeline.py"], check=True)
-print("✅ Data pipeline completed.")
 
 # === CONFIG ===
 tmap = {'KC': 'KCR', 'SD': 'SDP', 'SF': 'SFG', 'TB': 'TBR', 'WAS': 'WSN'}
@@ -16,6 +12,21 @@ stats_columns = [
     'pR', 'pH', 'p2B', 'p3B', 'pHR', 'pBB', 'pSO', 'pERA'
 ]
 data_dir = 'data'
+flag_file = os.path.join(data_dir, '.pipeline_complete')
+
+# === Run pipeline in a background thread ===
+def run_pipeline_in_background():
+    def _run():
+        print("🔄 Running data pipeline...")
+        try:
+            subprocess.run(["python", "mlb_data_pipeline.py"], check=True)
+            print("✅ Pipeline completed.")
+        except Exception as e:
+            print(f"❌ Pipeline failed: {e}")
+        finally:
+            with open(flag_file, "w") as f:
+                f.write(datetime.now().isoformat())
+    threading.Thread(target=_run, daemon=True).start()
 
 # === Utility Functions ===
 def scrape_today_games():
@@ -65,19 +76,20 @@ def moneyline_to_prob(ml):
         return np.nan
 
 def compute_parlay_ev(combo):
-    decimal_odds = np.prod([(100 + abs(team['Tm_ml'])) / 100 if team['Tm_ml'] > 0 else (100 / abs(team['Tm_ml']) + 1) for team in combo])
+    decimal_odds = np.prod([
+        (100 + abs(team['Tm_ml'])) / 100 if team['Tm_ml'] > 0 else (100 / abs(team['Tm_ml']) + 1)
+        for team in combo
+    ])
     prob_win = np.prod([team['Pred_prob'] for team in combo])
     ev = (decimal_odds * prob_win) - 1
     return decimal_odds, prob_win, ev
 
 # === Main Prediction Logic ===
 def run_predictions():
-    # Load model and logs
     model = joblib.load(os.path.join(data_dir, 'rf_mlb_model.joblib'))
     logs = pd.read_csv(os.path.join(data_dir, 'game_logs.csv'))
     logs['Date'] = pd.to_datetime(logs['Date'])
 
-    # Scrape today's games
     todays_df = scrape_today_games()
     if todays_df.empty:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
@@ -116,16 +128,16 @@ def run_predictions():
     latest['Bet_Edge'] = latest['Pred_prob'] - latest['Tm_prob']
 
     sorted_latest = latest.sort_values('Bet_Edge', ascending=False)
-
-    # Underdogs
     underdog_edges = sorted_latest[sorted_latest['Tm_ml'] > 100]
 
-    # Parlays
     parlay_combos = []
     for combo in combinations(sorted_latest.to_dict('records'), 3):
         decimal_odds, prob_win, ev = compute_parlay_ev(combo)
         parlay_combos.append({
-            'Teams': " + ".join(g['Tm'] if g['Pred_prob'] > 0.5 else g['Opp'] for g in combo),
+            'Teams': " + ".join(
+                f"{g['Tm'] if g['Pred_prob'] > 0.5 else g['Opp']} (vs {g['Opp'] if g['Pred_prob'] > 0.5 else g['Tm']})"
+                for g in combo
+            ),
             'Decimal Odds': round(decimal_odds, 2),
             'Win Prob': round(prob_win, 4),
             'EV': round(ev, 4)

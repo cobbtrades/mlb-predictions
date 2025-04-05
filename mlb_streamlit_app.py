@@ -1,13 +1,24 @@
 # mlb_streamlit_app.py
 import streamlit as st
 import pandas as pd
-from mlb_predict_today import run_predictions
+import os
+from mlb_predict_today import run_predictions, run_pipeline_in_background
 
 # === Streamlit Config ===
 st.set_page_config(page_title="MLB Daily Predictions", layout="wide")
 st.markdown("<h1 style='text-align: center; color: #e63946;'>⚾ MLB Daily Predictions & Betting Edges</h1>", unsafe_allow_html=True)
 
-# === Run Model Pipeline ===
+# === Trigger pipeline on first run (non-blocking) ===
+if "pipeline_started" not in st.session_state:
+    run_pipeline_in_background()
+    st.session_state.pipeline_started = True
+
+pipeline_flag = "data/.pipeline_complete"
+if not os.path.exists(pipeline_flag):
+    st.warning("⏳ Initializing data pipeline... please wait.")
+    st.stop()
+
+# === Run predictions ===
 with st.spinner("🔄 Fetching data and running predictions..."):
     top_edges_df, underdogs_df, parlays_df = run_predictions()
 
