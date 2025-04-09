@@ -128,7 +128,25 @@ def run_predictions():
     latest['Bet_Edge'] = latest['Pred_prob'] - latest['Tm_prob']
 
     sorted_latest = latest.sort_values('Bet_Edge', ascending=False)
-    underdog_edges = sorted_latest[sorted_latest['Tm_ml'] > 100]
+    # Create a field for predicted winner's moneyline and betting edge
+    sorted_latest['PredictedTeam'] = sorted_latest.apply(
+        lambda x: x['Tm'] if x['Pred_prob'] > 0.5 else x['Opp'], axis=1
+    )
+
+    sorted_latest['PredictedML'] = sorted_latest.apply(
+        lambda x: x['Tm_ml'] if x['Pred_prob'] > 0.5 else x['Opp_ml'], axis=1
+    )
+
+    sorted_latest['PredictedProb'] = sorted_latest['Pred_prob']
+    sorted_latest['ImpliedProb'] = sorted_latest.apply(
+        lambda x: moneyline_to_prob(x['Tm_ml']) if x['Pred_prob'] > 0.5 else moneyline_to_prob(x['Opp_ml']), axis=1
+    )
+
+    sorted_latest['PredEdge'] = sorted_latest['PredictedProb'] - sorted_latest['ImpliedProb']
+
+    # Filter for true underdogs
+    underdog_edges = sorted_latest[(sorted_latest['PredictedML'] > 100) & (sorted_latest['PredEdge'] > 0)]
+
 
     parlay_combos = []
     for combo in combinations(sorted_latest.to_dict('records'), 3):

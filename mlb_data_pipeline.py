@@ -1,7 +1,8 @@
 # mlb_data_pipeline.py
 
 from datetime import datetime, timedelta
-import os, re, json, time, requests
+import os, re, json, time
+import requests
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm

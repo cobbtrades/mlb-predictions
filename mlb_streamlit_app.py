@@ -1,6 +1,5 @@
 # mlb_streamlit_app.py
 import streamlit as st
-import pandas as pd
 import os
 from mlb_predict_today import run_predictions, run_pipeline_in_background
 
@@ -141,23 +140,21 @@ if underdogs_df.empty:
     st.info("No strong underdog opportunities found today.")
 else:
     dog_df = underdogs_df[[
-        'Tm', 'Opp', 'Tm_ml', 'Tm_prob', 'Pred_prob',
-        'Bet_Edge', 'Prediction', 'Confidence'
-    ]].copy().sort_values("Bet_Edge", ascending=False)
+        'PredictedTeam', 'Tm', 'Opp', 'PredictedML', 'PredictedProb',
+        'ImpliedProb', 'PredEdge', 'Confidence'
+    ]].copy().sort_values("PredEdge", ascending=False)
 
     dog_df.rename(columns={
-        'Tm': 'Team', 'Opp': 'Opponent', 'Tm_ml': 'ML',
-        'Tm_prob': 'Implied Prob', 'Pred_prob': 'Model Prob',
-        'Bet_Edge': 'Edge', 'Confidence': 'Conf.'
+        'PredictedTeam': 'Underdog Pick',
+        'Tm': 'Team',
+        'Opp': 'Opponent',
+        'PredictedML': 'ML',
+        'PredictedProb': 'Model Prob',
+        'ImpliedProb': 'Implied Prob',
+        'PredEdge': 'Edge',
+        'Confidence': 'Conf.'
     }, inplace=True)
 
-    # Compute Winner from predicted probability
-    dog_df["Winner"] = dog_df.apply(
-        lambda x: x["Team"] if x["Model Prob"] > 0.5 else x["Opponent"],
-        axis=1
-    )
-
-    dog_df.drop(columns=["Prediction"], inplace=True)
 
     st.markdown(render_html_table(
         dog_df,
