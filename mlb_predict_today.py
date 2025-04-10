@@ -1,4 +1,4 @@
-# mlb_predict_today.py
+# === mlb_predict_today.py ===
 import subprocess
 import threading
 import requests, re, json, pandas as pd, numpy as np, os, joblib
@@ -75,17 +75,28 @@ def moneyline_to_prob(ml):
     except:
         return np.nan
 
+def kelly_bet(ml, p, bankroll, fraction=0.5):
+    try:
+        ml = float(ml)
+        b = (ml / 100) if ml > 0 else (100 / abs(ml))
+        q = 1 - p
+        k = ((b * p) - q) / b
+        k = max(0, k)
+        return round(k * bankroll * fraction, 2)
+    except:
+        return 0.0
+
 def compute_parlay_ev(combo):
     decimal_odds = np.prod([
-        (100 + abs(team['Tm_ml'])) / 100 if team['Tm_ml'] > 0 else (100 / abs(team['Tm_ml']) + 1)
+        (100 + abs(team['PredictedML'])) / 100 if team['PredictedML'] > 0 else (100 / abs(team['PredictedML']) + 1)
         for team in combo
     ])
-    prob_win = np.prod([team['Pred_prob'] for team in combo])
+    prob_win = np.prod([team['PredictedProb'] for team in combo])
     ev = (decimal_odds * prob_win) - 1
     return decimal_odds, prob_win, ev
 
 # === Main Prediction Logic ===
-def run_predictions():
+def run_predictions(bankroll, fraction_kelly):
     model = joblib.load(os.path.join(data_dir, 'rf_mlb_model.joblib'))
     logs = pd.read_csv(os.path.join(data_dir, 'game_logs.csv'))
     logs['Date'] = pd.to_datetime(logs['Date'])
@@ -128,29 +139,28 @@ def run_predictions():
     latest['Bet_Edge'] = latest['Pred_prob'] - latest['Tm_prob']
 
     sorted_latest = latest.sort_values('Bet_Edge', ascending=False)
-    # Create a field for predicted winner's moneyline and betting edge
     sorted_latest['PredictedTeam'] = sorted_latest.apply(
         lambda x: x['Tm'] if x['Pred_prob'] > 0.5 else x['Opp'], axis=1
     )
-
     sorted_latest['PredictedML'] = sorted_latest.apply(
         lambda x: x['Tm_ml'] if x['Pred_prob'] > 0.5 else x['Opp_ml'], axis=1
     )
-
     sorted_latest['PredictedProb'] = sorted_latest['Pred_prob']
     sorted_latest['ImpliedProb'] = sorted_latest.apply(
         lambda x: moneyline_to_prob(x['Tm_ml']) if x['Pred_prob'] > 0.5 else moneyline_to_prob(x['Opp_ml']), axis=1
     )
-
     sorted_latest['PredEdge'] = sorted_latest['PredictedProb'] - sorted_latest['ImpliedProb']
+    sorted_latest['Suggested Bet ($)'] = sorted_latest.apply(
+        lambda x: kelly_bet(x['PredictedML'], x['PredictedProb'], bankroll, fraction_kelly), axis=1
+    )
 
-    # Filter for true underdogs
     underdog_edges = sorted_latest[(sorted_latest['PredictedML'] > 100) & (sorted_latest['PredEdge'] > 0)]
-
 
     parlay_combos = []
     for combo in combinations(sorted_latest.to_dict('records'), 3):
         decimal_odds, prob_win, ev = compute_parlay_ev(combo)
+        bet_size = round(bankroll * 0.01, 2)  # 1% fixed bet per parlay
+        expected_return = round(ev * bet_size, 2)
         parlay_combos.append({
             'Teams': " + ".join(
                 f"{g['Tm'] if g['Pred_prob'] > 0.5 else g['Opp']} (vs {g['Opp'] if g['Pred_prob'] > 0.5 else g['Tm']})"
@@ -158,12 +168,11 @@ def run_predictions():
             ),
             'Decimal Odds': round(decimal_odds, 2),
             'Win Prob': round(prob_win, 4),
-            'EV': round(ev, 4)
+            'EV': round(ev, 4),
+            'Suggested Bet ($)': bet_size,
+            'Expected Return ($)': expected_return
         })
 
-    if parlay_combos:
-        parlay_df = pd.DataFrame(parlay_combos).sort_values('EV', ascending=False).head(5)
-    else:
-        parlay_df = pd.DataFrame(columns=['Teams', 'Decimal Odds', 'Win Prob', 'EV'])
+    parlay_df = pd.DataFrame(parlay_combos).sort_values('EV', ascending=False).head(5) if parlay_combos else pd.DataFrame(columns=['Teams', 'Decimal Odds', 'Win Prob', 'EV', 'Suggested Bet ($)', 'Expected Return ($)'])
 
     return sorted_latest, underdog_edges, parlay_df
