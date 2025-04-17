@@ -1,6 +1,8 @@
 # === mlb_streamlit_app.py ===
 import streamlit as st
 import os
+import pandas as pd
+from datetime import datetime, timedelta
 from mlb_predict_today import run_predictions, run_pipeline_in_background
 
 # === Streamlit Config ===
@@ -12,15 +14,31 @@ st.sidebar.markdown("## 💸 Bankroll Settings")
 bankroll = st.sidebar.number_input("Enter Total Bankroll ($)", min_value=10, value=1000, step=10)
 fraction_kelly = st.sidebar.slider("Fractional Kelly (%)", min_value=10, max_value=100, value=50, step=5)
 
-# === Trigger pipeline on first run (non-blocking) ===
-if "pipeline_started" not in st.session_state:
-    run_pipeline_in_background()
-    st.session_state.pipeline_started = True
+# === Utility: Data Freshness Validation ===
+def is_data_fresh(filepath: str, required_date: datetime.date) -> bool:
+    if not os.path.exists(filepath):
+        return False
+    try:
+        df = pd.read_csv(filepath, parse_dates=['Date'])
+        latest_date = df['Date'].max().date()
+        return latest_date >= required_date
+    except Exception as e:
+        print(f"Error validating freshness for {filepath}: {e}")
+        return False
 
+# === Ensure data is fresh before running predictions ===
+yesterday = datetime.today().date() - timedelta(days=1)
 pipeline_flag = "data/.pipeline_complete"
-if not os.path.exists(pipeline_flag):
-    st.warning("⏳ Initializing data pipeline... please wait.")
+game_logs_fresh = is_data_fresh("data/game_logs.csv", yesterday)
+odds_fresh = is_data_fresh("data/odds_history.csv", yesterday)
+
+if not os.path.exists(pipeline_flag) or not game_logs_fresh or not odds_fresh:
+    st.warning("⏳ Data pipeline is not yet up-to-date with yesterday’s games. Initializing pipeline...")
+    run_pipeline_in_background()
     st.stop()
+
+# === Confirm freshness to user ===
+st.success(f"✅ Data verified through {yesterday.strftime('%B %d, %Y')}. Proceeding with predictions...")
 
 # === Run predictions ===
 with st.spinner("🔄 Fetching data and running predictions..."):
@@ -106,7 +124,7 @@ st.markdown("### 📈 Top Value Edges (Sorted by Edge)")
 if top_edges_df.empty:
     st.info("No predictions available today.")
 else:
-    edges_df = top_edges_df[[
+    edges_df = top_edges_df[[ 
         'Tm', 'Opp', 'Tm_ml', 'Opp_ml', 'Tm_prob',
         'Pred_prob', 'Bet_Edge', 'Prediction', 'Confidence',
         'PredictedTeam', 'PredictedML', 'Suggested Bet ($)'
@@ -141,7 +159,7 @@ st.markdown("### 🐶 Underdog Value Picks")
 if underdogs_df.empty:
     st.info("No strong underdog opportunities found today.")
 else:
-    dog_df = underdogs_df[[
+    dog_df = underdogs_df[[ 
         'PredictedTeam', 'Tm', 'Opp', 'PredictedML', 'PredictedProb',
         'ImpliedProb', 'PredEdge', 'Confidence', 'Suggested Bet ($)'
     ]].copy().sort_values("PredEdge", ascending=False)
